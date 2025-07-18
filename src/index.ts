@@ -12,8 +12,13 @@ async function handlerReadiness(req: Request, res: Response): Promise<void>{
 }
 
 async function handlerMetrics(req:Request, res: Response): Promise<void> {
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.send(`Hits: ${cfg.fileserverHits}`);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<html>
+  <body>
+    <h1>Welcome, Chirpy Admin</h1>
+    <p>Chirpy has been visited ${cfg.fileserverHits} times!</p>
+  </body>
+</html>`);
 }
 
 async function handlerReset(req:Request, res: Response): Promise<void> {
@@ -30,8 +35,8 @@ app.use(middlewareLogResponses);
 app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
 app.get("/api/healthz", handlerReadiness);
-app.get("/api/metrics", handlerMetrics);
-app.get("/api/reset", handlerReset);
+app.get("/admin/metrics", handlerMetrics);
+app.get("/admin/reset", handlerReset);
 
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`)
