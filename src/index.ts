@@ -36,37 +36,26 @@ async function handlerChirpsValidate(req: Request, res: Response) {
     body: string;
   };
 
-  let body = "";
+  let body: parameters = req.body;
+  const maxChirpLength = 140;
+  if (body.body.length > maxChirpLength) {
+    respondWithError(res, 400, "Chirp is too long");
+    return;
+  }
 
-  req.on("data", (chunk) => {
-    body += chunk;
+  respondWithJSON(res, 200, {
+    valid: true,
   });
 
-  let params: parameters;
-  req.on("end", () => {
-    try {
-      params = JSON.parse(body);
-    } catch (e) {
-      respondWithError(res, 400, "Invalid JSON");
-      return;
-    }
-    const maxChirpLength = 140;
-    if (params.body.length > maxChirpLength) {
-      respondWithError(res, 400, "Chirp is too long");
-      return;
-    }
-
-    respondWithJSON(res, 200, {
-      valid: true,
-    });
-  });
 }
+
 
 const app = express();
 const PORT = 8080;
 
 app.use(middlewareLogResponses);
 app.use("/app", middlewareMetricsInc, express.static("./src/app"));
+app.use(express.json());
 
 app.get("/api/healthz", handlerReadiness);
 app.get("/admin/metrics", handlerMetrics);
