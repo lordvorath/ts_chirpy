@@ -4,6 +4,7 @@ import { cfg } from "./config.js";
 import { middlewareLogResponses, middlewareMetricsInc } from "./middleware.js";
 import { channel } from "diagnostics_channel";
 import { ifError } from "assert";
+import { respondWithError, respondWithJSON } from "./json.js";
 
 
 
@@ -30,56 +31,35 @@ async function handlerReset(req: Request, res: Response): Promise<void> {
   res.end();
 }
 
-async function handlerValidateChirp(req: Request, res: Response): Promise<void> {
+async function handlerChirpsValidate(req: Request, res: Response) {
+  type parameters = {
+    body: string;
+  };
+
   let body = "";
 
   req.on("data", (chunk) => {
     body += chunk;
   });
 
+  let params: parameters;
   req.on("end", () => {
-    res.header("Content-Type", "application/json");
-
     try {
-      const parsedBody: { body: string } = JSON.parse(body);
-      if (!parsedBody.body) {
-        res
-          .status(400)
-          .send(JSON.stringify({
-            error: "Missing body in JSON"
-          }));
-      } else if (parsedBody.body.length > 140) {
-        res
-          .status(400)
-          .send(JSON.stringify({
-            error: "Chirp is too long"
-          }));
-      } else {
-        res
-          .status(200)
-          .send(JSON.stringify({
-            valid: true
-          }));
-      }
-      res.end();
-    } catch (err) {
-      if (err instanceof Error) {
-        res
-          .status(400)
-          .send(JSON.stringify({
-            error: `Invalid JSON: ${err.message}`
-          }));
-      } else {
-        res
-          .status(400)
-          .send(JSON.stringify({
-            error: `Something went wrong`
-          }));
-      }
-      res.end();
+      params = JSON.parse(body);
+    } catch (e) {
+      respondWithError(res, 400, "Invalid JSON");
+      return;
     }
-  });
+    const maxChirpLength = 140;
+    if (params.body.length > maxChirpLength) {
+      respondWithError(res, 400, "Chirp is too long");
+      return;
+    }
 
+    respondWithJSON(res, 200, {
+      valid: true,
+    });
+  });
 }
 
 const app = express();
@@ -92,7 +72,7 @@ app.get("/api/healthz", handlerReadiness);
 app.get("/admin/metrics", handlerMetrics);
 
 app.post("/admin/reset", handlerReset);
-app.post("/api/validate_chirp", handlerValidateChirp)
+app.post("/api/validate_chirp", handlerChirpsValidate)
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`)
