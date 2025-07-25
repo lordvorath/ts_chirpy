@@ -20,5 +20,38 @@ export function  middlewareMetricsInc(req: Request, res: Response, next: NextFun
 
 export function errorMiddleWare(err: Error, _: Request, res: Response, __: NextFunction): void {
     console.log(err.message);
-    respondWithError(res, 500, "Something went wrong on our end");
+    if (err instanceof BadRequestError   ||
+        err instanceof UnauthorizedError ||
+        err instanceof ForbiddenError    ||
+        err instanceof NotFoundError
+    ) {
+        respondWithError(res, err.code, err.message)
+    } else {
+        respondWithError(res, 500, "Internal Server Error");
+    }
+}
+
+export class BadRequestError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+    code = 400;
+}
+export class UnauthorizedError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+    code = 401;
+}
+export class ForbiddenError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+    code = 403;
+}
+export class NotFoundError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+    code = 404;
 }

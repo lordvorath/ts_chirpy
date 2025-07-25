@@ -1,7 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { cfg } from "./config.js";
-import { errorMiddleWare, middlewareLogResponse, middlewareMetricsInc } from "./middleware.js";
+import { BadRequestError, errorMiddleWare, middlewareLogResponse, middlewareMetricsInc } from "./middleware.js";
 import { respondWithError, respondWithJSON } from "./json.js";
 
 
@@ -37,9 +37,7 @@ async function handlerChirpsValidate(req: Request, res: Response) {
   let body: parameters = req.body;
   const maxChirpLength = 140;
   if (body.body.length > maxChirpLength) {
-    throw new Error("Chirp is too long");
-    respondWithError(res, 400, "Chirp is too long");
-    return;
+    throw new BadRequestError("Chirp is too long. Max length is 140");
   }
 
   const words = body.body.split(/\s+/);
