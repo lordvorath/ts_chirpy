@@ -3,7 +3,12 @@ import type { Request, Response, NextFunction } from "express";
 import { cfg } from "./config.js";
 import { BadRequestError, errorMiddleWare, middlewareLogResponse, middlewareMetricsInc } from "./middleware.js";
 import { respondWithError, respondWithJSON } from "./json.js";
+import postgres from "postgres";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { drizzle } from "drizzle-orm/postgres-js";
 
+const migrationClient = postgres(cfg.db.url, { max: 1 });
+await migrate(drizzle(migrationClient), cfg.db.migrationConfig);
 
 
 
