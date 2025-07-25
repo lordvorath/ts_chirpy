@@ -1,9 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { cfg } from "./config.js";
-import { middlewareLogResponses, middlewareMetricsInc } from "./middleware.js";
-import { channel } from "diagnostics_channel";
-import { ifError } from "assert";
+import { errorMiddleWare, middlewareLogResponse, middlewareMetricsInc } from "./middleware.js";
 import { respondWithError, respondWithJSON } from "./json.js";
 
 
@@ -39,6 +37,7 @@ async function handlerChirpsValidate(req: Request, res: Response) {
   let body: parameters = req.body;
   const maxChirpLength = 140;
   if (body.body.length > maxChirpLength) {
+    throw new Error("Chirp is too long");
     respondWithError(res, 400, "Chirp is too long");
     return;
   }
@@ -67,15 +66,26 @@ async function handlerChirpsValidate(req: Request, res: Response) {
 const app = express();
 const PORT = 8080;
 
-app.use(middlewareLogResponses);
-app.use("/app", middlewareMetricsInc, express.static("./src/app"));
+app.use(middlewareLogResponse);
 app.use(express.json());
 
-app.get("/api/healthz", handlerReadiness);
-app.get("/admin/metrics", handlerMetrics);
+app.use("/app", middlewareMetricsInc, express.static("./src/app"));
 
-app.post("/admin/reset", handlerReset);
-app.post("/api/validate_chirp", handlerChirpsValidate)
+app.get("/api/healthz", (req, res, next) => {
+  Promise.resolve(handlerReadiness(req, res)).catch(next);
+});
+app.get("/admin/metrics", (req, res, next) => {
+  Promise.resolve(handlerMetrics(req, res)).catch(next);
+});
+app.post("/admin/reset", (req, res, next) => {
+  Promise.resolve(handlerReset(req, res)).catch(next);
+});
+
+app.post("/api/validate_chirp", (req, res, next) => {
+  Promise.resolve(handlerChirpsValidate(req, res)).catch(next);
+});
+
+app.use(errorMiddleWare);
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`)
