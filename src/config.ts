@@ -5,6 +5,7 @@ process.loadEnvFile(".env");
 type APIConfig = {
     fileserverHits: number;
     db: DBConfig;
+    platform: string;
 };
 
 type DBConfig = {
@@ -14,6 +15,7 @@ type DBConfig = {
 
 function envOrThrow(key: string): string {
     if (process.env[key]) {
+        console.log(process.env[key]);
         return process.env[key]
     }
     throw new Error(`Env variable ${key} not found`);
@@ -24,6 +26,7 @@ export const cfg: APIConfig = {
     fileserverHits: 0,
     db: {
         url: envOrThrow("DB_URL"),
-        migrationConfig: { migrationsFolder: "./src/db",}
+        migrationConfig: { migrationsFolder: "./src/db",},
     },
+    platform: envOrThrow("PLATFORM"),
 };

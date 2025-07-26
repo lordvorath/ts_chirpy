@@ -6,10 +6,11 @@ import { respondWithError, respondWithJSON } from "./json.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { createUser, deleteAllUsers } from "./db/queries/users.js";
+import { createChirp } from "./db/queries/chirps.js";
 
 const migrationClient = postgres(cfg.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), cfg.db.migrationConfig);
-
 
 
 async function handlerReadiness(req: Request, res: Response): Promise<void> {
@@ -28,24 +29,24 @@ async function handlerMetrics(req: Request, res: Response): Promise<void> {
 }
 
 async function handlerReset(req: Request, res: Response): Promise<void> {
+  if (cfg.platform !== "dev") {
+    respondWithError(res, 403, "Forbidden");
+    return;
+  }
   cfg.fileserverHits = 0;
+  await deleteAllUsers();
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.write("Metrics reset");
   res.end();
 }
 
-async function handlerChirpsValidate(req: Request, res: Response) {
-  type parameters = {
-    body: string;
-  };
-
-  let body: parameters = req.body;
+function validateChirp(chirp: string) {
   const maxChirpLength = 140;
-  if (body.body.length > maxChirpLength) {
+  if (chirp.length > maxChirpLength) {
     throw new BadRequestError("Chirp is too long. Max length is 140");
   }
 
-  const words = body.body.split(/\s+/);
+  const words = chirp.split(/\s+/);
   const badWords = ["kerfuffle", "sharbert", "fornax"];
   let cleaned = [];
   for (let i = 0; i < words.length; i++) {
@@ -59,10 +60,35 @@ async function handlerChirpsValidate(req: Request, res: Response) {
   }
 
   const cleanedBody = cleaned.join(" ");
-  respondWithJSON(res, 200, {
-    cleanedBody: cleanedBody,
+  return cleanedBody;
+
+}
+
+async function handlerCreateUser(req:Request, res: Response) {
+  type params = {
+    email: string
+  }
+
+  const email: params = req.body;
+
+  const newUser = await createUser({
+    email: email.email,
   });
 
+  respondWithJSON(res, 201, newUser);
+}
+
+async function handlerCreateChirp(req:Request, res: Response) {
+  type params = {
+    body: string,
+    userId: string,
+  }
+  const p: params = req.body;
+  const chirpText = validateChirp(p.body);
+
+  const newChirp = await createChirp({body: chirpText, userId: p.userId});
+
+  respondWithJSON(res, 201, newChirp);
 }
 
 
@@ -84,8 +110,12 @@ app.post("/admin/reset", (req, res, next) => {
   Promise.resolve(handlerReset(req, res)).catch(next);
 });
 
-app.post("/api/validate_chirp", (req, res, next) => {
-  Promise.resolve(handlerChirpsValidate(req, res)).catch(next);
+app.post("/api/users", (req, res, next) => {
+  Promise.resolve(handlerCreateUser(req, res)).catch(next);
+});
+
+app.post("/api/chirps", (req, res, next) => {
+  Promise.resolve(handlerCreateChirp(req, res)).catch(next);
 });
 
 app.use(errorMiddleWare);
