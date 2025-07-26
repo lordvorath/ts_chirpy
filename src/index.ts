@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser, deleteAllUsers } from "./db/queries/users.js";
-import { createChirp } from "./db/queries/chirps.js";
+import { createChirp, getAllChirps } from "./db/queries/chirps.js";
 
 const migrationClient = postgres(cfg.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), cfg.db.migrationConfig);
@@ -91,6 +91,11 @@ async function handlerCreateChirp(req:Request, res: Response) {
   respondWithJSON(res, 201, newChirp);
 }
 
+async function handlerGetAllChrips(req:Request, res: Response) {
+  const chirps = await getAllChirps();
+  respondWithJSON(res, 200, chirps);
+}
+
 
 const app = express();
 const PORT = 8080;
@@ -106,14 +111,17 @@ app.get("/api/healthz", (req, res, next) => {
 app.get("/admin/metrics", (req, res, next) => {
   Promise.resolve(handlerMetrics(req, res)).catch(next);
 });
+app.get("/api/chirps", (req, res, next) => {
+  Promise.resolve(handlerGetAllChrips(req, res)).catch(next);
+});
+
+
 app.post("/admin/reset", (req, res, next) => {
   Promise.resolve(handlerReset(req, res)).catch(next);
 });
-
 app.post("/api/users", (req, res, next) => {
   Promise.resolve(handlerCreateUser(req, res)).catch(next);
 });
-
 app.post("/api/chirps", (req, res, next) => {
   Promise.resolve(handlerCreateChirp(req, res)).catch(next);
 });
