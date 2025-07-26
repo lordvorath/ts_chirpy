@@ -20,12 +20,14 @@ export async function getAllChirps() {
 }
 
 export async function getChirpByID(id: string) {
-  const [result] = await db
+  const result = await db
     .select()
     .from(chirps)
     .where(eq(chirps.id, id));
-
-  return result;
+  if (result.length === 0) {
+    return;
+  }
+  return result[0];
 }
 
 export async function deleteAllChirps() {

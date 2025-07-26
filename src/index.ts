@@ -1,7 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { cfg } from "./config.js";
-import { BadRequestError, errorMiddleWare, middlewareLogResponse, middlewareMetricsInc } from "./middleware.js";
+import { BadRequestError, errorMiddleWare, middlewareLogResponse, middlewareMetricsInc, NotFoundError } from "./middleware.js";
 import { respondWithError, respondWithJSON } from "./json.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -98,8 +98,7 @@ async function handlerGetAllChrips(req:Request, res: Response) {
 async function handlerGetChirpByID(req:Request, res: Response) {
   const chirp = await getChirpByID(req.params.chirpID)  ;
   if (!chirp) {
-    respondWithError(res, 404, "Chirp not found");
-    return;
+    throw new NotFoundError(`Chirp with chirpId: ${req.params.chirpID} not found`);
   }
   respondWithJSON(res, 200, chirp);
 }
