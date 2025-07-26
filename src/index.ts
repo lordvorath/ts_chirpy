@@ -1,13 +1,15 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { cfg } from "./config.js";
-import { BadRequestError, errorMiddleWare, middlewareLogResponse, middlewareMetricsInc, NotFoundError } from "./middleware.js";
+import { BadRequestError, errorMiddleWare, ForbiddenError, middlewareLogResponse, middlewareMetricsInc, NotFoundError } from "./middleware.js";
 import { respondWithError, respondWithJSON } from "./json.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { createUser, deleteAllUsers } from "./db/queries/users.js";
+import { createUser, deleteAllUsers, getUserByEmail } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
+import { checkPasswordHash, hashPassword } from "./auth.js";
+import { NewUser } from "./db/schema.js";
 
 const migrationClient = postgres(cfg.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), cfg.db.migrationConfig);
@@ -67,15 +69,21 @@ function validateChirp(chirp: string) {
 async function handlerCreateUser(req:Request, res: Response) {
   type params = {
     email: string
+    password: string
   }
 
-  const email: params = req.body;
+  const pp: params = req.body;
+  const hp = hashPassword(pp.password)
 
   const newUser = await createUser({
-    email: email.email,
+    email: pp.email,
+    hashedPassword: hp,
+
   });
 
-  respondWithJSON(res, 201, newUser);
+  const resp: Omit<NewUser, "hashedPassword"> = newUser;
+
+  respondWithJSON(res, 201, resp);
 }
 
 async function handlerCreateChirp(req:Request, res: Response) {
@@ -101,6 +109,28 @@ async function handlerGetChirpByID(req:Request, res: Response) {
     throw new NotFoundError(`Chirp with chirpId: ${req.params.chirpID} not found`);
   }
   respondWithJSON(res, 200, chirp);
+}
+
+async function handlerLogin(req:Request, res: Response) {
+  type params = {
+    password: string
+    email: string
+  }
+
+  const pp: params = req.body;
+  const user = await getUserByEmail(pp.email);
+  if (!user.hashedPassword || user.hashedPassword === "unset"){
+    throw new ForbiddenError("Reset your password");
+  }
+
+  try {
+    checkPasswordHash(pp.password, user.hashedPassword);
+  } catch (err) {
+    throw err;
+  }
+
+  const resp: Omit<NewUser, "hashedPassword"> = user;
+  respondWithJSON(res, 200, resp);
 }
 
 
@@ -131,6 +161,9 @@ app.post("/admin/reset", (req, res, next) => {
 });
 app.post("/api/users", (req, res, next) => {
   Promise.resolve(handlerCreateUser(req, res)).catch(next);
+});
+app.post("/api/login", (req, res, next) => {
+  Promise.resolve(handlerLogin(req, res)).catch(next);
 });
 app.post("/api/chirps", (req, res, next) => {
   Promise.resolve(handlerCreateChirp(req, res)).catch(next);
