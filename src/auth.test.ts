@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, vitest } from "vitest";
-import { checkPasswordHash, hashPassword, makeJWT, validateJWT } from "./auth";
-import { fail } from "assert";
+import { describe, it, expect, beforeAll } from "vitest";
+import { hashPassword, checkPasswordHash, makeJWT, validateJWT } from "./auth";
 import { UnauthorizedError } from "./middleware";
 
 describe("Password Hashing", () => {
@@ -18,42 +17,52 @@ describe("Password Hashing", () => {
     const result = await checkPasswordHash(password1, hash1);
     expect(result).toBe(true);
   });
+
+  it("should return false for an incorrect password", async () => {
+    const result = await checkPasswordHash("wrongPassword", hash1);
+    expect(result).toBe(false);
+  });
+
+  it("should return false when password doesn't match a different hash", async () => {
+    const result = await checkPasswordHash(password1, hash2);
+    expect(result).toBe(false);
+  });
+
+  it("should return false for an empty password", async () => {
+    const result = await checkPasswordHash("", hash1);
+    expect(result).toBe(false);
+  });
+
+  it("should return false for an invalid hash", async () => {
+    const result = await checkPasswordHash(password1, "invalidhash");
+    expect(result).toBe(false);
+  });
 });
 
-describe("JWT handling", () => {
-    const userID1 = "abcdef12345";
-    const secret = "verysecret";
-    const expiresIn = 300;
+describe("JWT Functions", () => {
+  const secret = "secret";
+  const wrongSecret = "wrong_secret";
+  const userID = "some-unique-user-id";
+  let validToken: string;
 
-    it("should successfully create a JWT", async () => {
-        try {
-            const result = makeJWT(userID1, expiresIn, secret);
-            expect(result).toBeTruthy();
-        } catch (e) {
-            if (e instanceof Error) {
-                fail(e);
-            }
-        }
-    });
+  beforeAll(() => {
+    validToken = makeJWT(userID, 3600, secret);
+  });
 
-    it("should correctly retrieve user id", async () => {
-        try {
-            const result = makeJWT(userID1, expiresIn, secret);
-            const retrievedID = validateJWT(result, secret);
-            expect(retrievedID).toBe(userID1);
-        } catch (e) {
-            if (e instanceof Error) {
-                fail(e);
-            }
-        }
-    });
+  it("should validate a valid token", () => {
+    const result = validateJWT(validToken, secret);
+    expect(result).toBe(userID);
+  });
 
-    it("should throw with expired token", async () => {
-        const jwt = makeJWT(userID1, -300, secret);
-        expect(() => validateJWT(jwt, secret)).toThrow(UnauthorizedError);
-    });
+  it("should throw an error for an invalid token string", () => {
+    expect(() => validateJWT("invalid.token.string", secret)).toThrow(
+      UnauthorizedError,
+    );
+  });
 
-    it("should throw with invalid token", async () => {
-        expect(() => validateJWT("blahblahblah", secret)).toThrow(UnauthorizedError);
-    });
+  it("should throw an error when the token is signed with a wrong secret", () => {
+    expect(() => validateJWT(validToken, wrongSecret)).toThrow(
+      UnauthorizedError,
+    );
+  });
 });
