@@ -1,6 +1,8 @@
 import bcrypt from "bcrypt";
-import { ForbiddenError, UnauthorizedError } from "./middleware.js";
-import { JwtPayload, sign, verify } from "jsonwebtoken";
+import { BadRequestError, ForbiddenError, UnauthorizedError } from "./middleware.js";
+import { JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
+import { Request } from "express";
 
 const TOKEN_ISSUER = "chirpy";
 
@@ -15,22 +17,27 @@ export async function checkPasswordHash(password: string, hash: string) {
 
 type payload = Pick<JwtPayload, "iss" | "sub" | "iat" | "exp">;
 
-export function makeJWT(userID: string, expiresIn: number, secret: string): string {
-    
-    const p: payload = {
-        iss: TOKEN_ISSUER,
-        sub: userID,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + expiresIn,
-    };
-    const jwt = sign(p, secret, { algorithm: "HS256" });
-    return jwt;
+export function makeJWT(userID: string, expiresIn: number, secret: string) {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const expiresAt = issuedAt + expiresIn;
+  const token = jwt.sign(
+    {
+      iss: TOKEN_ISSUER,
+      sub: userID,
+      iat: issuedAt,
+      exp: expiresAt,
+    } satisfies payload,
+    secret,
+    { algorithm: "HS256" },
+  );
+
+  return token;
 }
 
-export function validateJWT(tokenString: string, secret: string): string {
-    let decoded: payload;
+export function validateJWT(tokenString: string, secret: string) {
+  let decoded: payload;
   try {
-    decoded = verify(tokenString, secret) as JwtPayload;
+    decoded = jwt.verify(tokenString, secret) as JwtPayload;
   } catch (e) {
     throw new UnauthorizedError("Invalid token");
   }
@@ -44,4 +51,21 @@ export function validateJWT(tokenString: string, secret: string): string {
   }
 
   return decoded.sub;
+}
+
+export function getBearerToken(req: Request) {
+  const authHeader = req.get("Authorization");
+  if (!authHeader) {
+    throw new BadRequestError("Malformed authorization header");
+  }
+
+  return extractBearerToken(authHeader);
+}
+
+export function extractBearerToken(header: string) {
+  const splitAuth = header.split(" ");
+  if (splitAuth.length < 2 || splitAuth[0] !== "Bearer") {
+    throw new BadRequestError("Malformed authorization header");
+  }
+  return splitAuth[1];
 }

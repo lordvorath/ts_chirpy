@@ -1,14 +1,14 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { cfg } from "./config.js";
-import { BadRequestError, errorMiddleWare, ForbiddenError, middlewareLogResponse, middlewareMetricsInc, NotFoundError } from "./middleware.js";
+import { BadRequestError, errorMiddleWare, ForbiddenError, middlewareLogResponse, middlewareMetricsInc, NotFoundError, UnauthorizedError } from "./middleware.js";
 import { respondWithError, respondWithJSON } from "./json.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser, deleteAllUsers, getUserByEmail } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
-import { checkPasswordHash, hashPassword } from "./auth.js";
+import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
 
 const migrationClient = postgres(cfg.db.url, { max: 1 });
@@ -54,7 +54,7 @@ function validateChirp(chirp: string) {
   for (let i = 0; i < words.length; i++) {
     let w = words[i];
     for (let bw of badWords) {
-      if (w.toLowerCase() === bw){
+      if (w.toLowerCase() === bw) {
         w = "****";
       }
     }
@@ -66,14 +66,14 @@ function validateChirp(chirp: string) {
 
 }
 
-async function handlerCreateUser(req:Request, res: Response) {
+async function handlerCreateUser(req: Request, res: Response) {
   type params = {
     email: string
     password: string
   }
 
   const pp: params = req.body;
-  const hp = hashPassword(pp.password)
+  const hp = await hashPassword(pp.password)
 
   const newUser = await createUser({
     email: pp.email,
@@ -86,40 +86,48 @@ async function handlerCreateUser(req:Request, res: Response) {
   respondWithJSON(res, 201, resp);
 }
 
-async function handlerCreateChirp(req:Request, res: Response) {
+async function handlerCreateChirp(req: Request, res: Response) {
+  const token = getBearerToken(req);
+  const userId = validateJWT(token, cfg.secret);
+  if (!userId) {
+    throw new UnauthorizedError("think you're funny?;")
+  }
+
   type params = {
     body: string,
-    userId: string,
   }
   const p: params = req.body;
   const chirpText = validateChirp(p.body);
 
-  const newChirp = await createChirp({body: chirpText, userId: p.userId});
+  const newChirp = await createChirp({ body: chirpText, userId });
 
   respondWithJSON(res, 201, newChirp);
 }
 
-async function handlerGetAllChrips(req:Request, res: Response) {
+async function handlerGetAllChrips(req: Request, res: Response) {
+
   const chirps = await getAllChirps();
   respondWithJSON(res, 200, chirps);
 }
-async function handlerGetChirpByID(req:Request, res: Response) {
-  const chirp = await getChirpByID(req.params.chirpID)  ;
+async function handlerGetChirpByID(req: Request, res: Response) {
+  const chirp = await getChirpByID(req.params.chirpID);
   if (!chirp) {
     throw new NotFoundError(`Chirp with chirpId: ${req.params.chirpID} not found`);
   }
   respondWithJSON(res, 200, chirp);
 }
 
-async function handlerLogin(req:Request, res: Response) {
+async function handlerLogin(req: Request, res: Response) {
   type params = {
     password: string
     email: string
+    expiresInSeconds: string | null
   }
 
   const pp: params = req.body;
+
   const user = await getUserByEmail(pp.email);
-  if (!user.hashedPassword || user.hashedPassword === "unset"){
+  if (!user.hashedPassword || user.hashedPassword === "unset") {
     throw new ForbiddenError("Reset your password");
   }
 
@@ -129,8 +137,19 @@ async function handlerLogin(req:Request, res: Response) {
     throw err;
   }
 
+  let timeout = 60 * 60;
+  if (pp.expiresInSeconds) {
+    timeout = parseInt(pp.expiresInSeconds);
+  }
+  if (timeout > 60 * 60) {
+    timeout = 60 * 60;
+  }
+
+  if (!user.id) { throw new Error("WTF") };
+  const token = makeJWT(user.id, timeout, cfg.secret);
+
   const resp: Omit<NewUser, "hashedPassword"> = user;
-  respondWithJSON(res, 200, resp);
+  respondWithJSON(res, 200, { ...resp, token: token });
 }
 
 
