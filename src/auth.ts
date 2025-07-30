@@ -1,8 +1,9 @@
 import bcrypt from "bcrypt";
-import { BadRequestError, ForbiddenError, UnauthorizedError } from "./middleware.js";
+import { BadRequestError, UnauthorizedError } from "./middleware.js";
 import { JwtPayload } from "jsonwebtoken";
 import jwt from "jsonwebtoken";
 import { Request } from "express";
+import crypto from "crypto";
 
 const TOKEN_ISSUER = "chirpy";
 
@@ -68,4 +69,8 @@ export function extractBearerToken(header: string) {
     throw new BadRequestError("Malformed authorization header");
   }
   return splitAuth[1];
+}
+
+export function makeRefreshToken(): string {
+  return crypto.randomBytes(32).toString("hex");
 }

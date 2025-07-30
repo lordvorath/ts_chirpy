@@ -8,8 +8,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser, deleteAllUsers, getUserByEmail } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
-import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, validateJWT } from "./auth.js";
+import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
+import { createRefreshToken, getUserFromRefreshToken, revokeToken } from "./db/queries/refresh_tokens.js";
 
 const migrationClient = postgres(cfg.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), cfg.db.migrationConfig);
@@ -121,7 +122,6 @@ async function handlerLogin(req: Request, res: Response) {
   type params = {
     password: string
     email: string
-    expiresInSeconds: string | null
   }
 
   const pp: params = req.body;
@@ -137,19 +137,35 @@ async function handlerLogin(req: Request, res: Response) {
     throw err;
   }
 
-  let timeout = 60 * 60;
-  if (pp.expiresInSeconds) {
-    timeout = parseInt(pp.expiresInSeconds);
-  }
-  if (timeout > 60 * 60) {
-    timeout = 60 * 60;
-  }
+  const rtstring = makeRefreshToken();
+  const refresh_token = await createRefreshToken({
+    token: rtstring,
+    expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 60),
+    userId: user.id,
+    revokedAt: null,
+  });
 
   if (!user.id) { throw new Error("WTF") };
-  const token = makeJWT(user.id, timeout, cfg.secret);
+  const token = makeJWT(user.id, 60 * 60, cfg.secret);
 
   const resp: Omit<NewUser, "hashedPassword"> = user;
-  respondWithJSON(res, 200, { ...resp, token: token });
+  respondWithJSON(res, 200, { ...resp, token: token, refreshToken: refresh_token.token });
+}
+
+async function handlerRefresh(req: Request, res: Response) {
+  const reqToken = getBearerToken(req);
+  if (!reqToken) { throw new UnauthorizedError("no refresh token") }
+  const query = await getUserFromRefreshToken(reqToken);
+  if (!query || query.refresh_tokens.revokedAt) { throw new UnauthorizedError("user not found or token expired")}
+  const newToken = makeJWT(query.users.id, 60 * 60, cfg.secret);
+  respondWithJSON(res, 200, {token: newToken});
+}
+
+async function handlerRevoke(req:Request, res: Response) {
+  const reqToken = getBearerToken(req);
+  if (!reqToken) { throw new UnauthorizedError("no refresh token") }
+  await revokeToken(reqToken);
+  respondWithJSON(res, 204, {});
 }
 
 
@@ -183,6 +199,12 @@ app.post("/api/users", (req, res, next) => {
 });
 app.post("/api/login", (req, res, next) => {
   Promise.resolve(handlerLogin(req, res)).catch(next);
+});
+app.post("/api/refresh", (req, res, next) => {
+  Promise.resolve(handlerRefresh(req, res)).catch(next);
+});
+app.post("/api/revoke", (req, res, next) => {
+  Promise.resolve(handlerRevoke(req, res)).catch(next);
 });
 app.post("/api/chirps", (req, res, next) => {
   Promise.resolve(handlerCreateChirp(req, res)).catch(next);

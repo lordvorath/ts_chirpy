@@ -36,6 +36,13 @@
       "when": 1753728257565,
       "tag": "0004_free_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1753895472277,
+      "tag": "0005_round_chamber",
+      "breakpoints": true
     }
   ]
 }
