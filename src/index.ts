@@ -6,7 +6,7 @@ import { respondWithError, respondWithJSON } from "./json.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { createUser, deleteAllUsers, getUserByEmail } from "./db/queries/users.js";
+import { createUser, deleteAllUsers, getUserByEmail, getUserByID, updateUser } from "./db/queries/users.js";
 import { createChirp, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
 import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
@@ -156,16 +156,40 @@ async function handlerRefresh(req: Request, res: Response) {
   const reqToken = getBearerToken(req);
   if (!reqToken) { throw new UnauthorizedError("no refresh token") }
   const query = await getUserFromRefreshToken(reqToken);
-  if (!query || query.refresh_tokens.revokedAt) { throw new UnauthorizedError("user not found or token expired")}
+  if (!query || query.refresh_tokens.revokedAt) { throw new UnauthorizedError("user not found or token expired") }
   const newToken = makeJWT(query.users.id, 60 * 60, cfg.secret);
-  respondWithJSON(res, 200, {token: newToken});
+  respondWithJSON(res, 200, { token: newToken });
 }
 
-async function handlerRevoke(req:Request, res: Response) {
+async function handlerRevoke(req: Request, res: Response) {
   const reqToken = getBearerToken(req);
   if (!reqToken) { throw new UnauthorizedError("no refresh token") }
   await revokeToken(reqToken);
   respondWithJSON(res, 204, {});
+}
+
+async function handlerUpdateUser(req: Request, res: Response) {
+  const reqToken = getBearerToken(req);
+  if (!reqToken) { throw new UnauthorizedError("no access token") }
+  type params = {
+    password: string;
+    email: string;
+  }
+  const userID = validateJWT(reqToken, cfg.secret);
+  const b: params = req.body;
+  if (!b.password || !b.email) {
+    throw new BadRequestError("missing email or password");
+  }
+
+  const user = await getUserByID(userID);
+  if (!user) {
+    throw new UnauthorizedError("user not found");
+  }
+
+  const newUser = await updateUser(user.id, b.email, await hashPassword(b.password));
+
+  const resp: Omit<NewUser, "hashedPassword"> = newUser;
+  respondWithJSON(res, 200, resp);
 }
 
 
@@ -208,6 +232,10 @@ app.post("/api/revoke", (req, res, next) => {
 });
 app.post("/api/chirps", (req, res, next) => {
   Promise.resolve(handlerCreateChirp(req, res)).catch(next);
+});
+
+app.put("/api/users", (req, res, next) => {
+  Promise.resolve(handlerUpdateUser(req, res)).catch(next);
 });
 
 app.use(errorMiddleWare);
