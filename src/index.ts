@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser, deleteAllUsers, getUserByEmail, getUserByID, updateUser } from "./db/queries/users.js";
-import { createChirp, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
+import { createChirp, deleteChirpByID, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
 import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
 import { createRefreshToken, getUserFromRefreshToken, revokeToken } from "./db/queries/refresh_tokens.js";
@@ -192,6 +192,17 @@ async function handlerUpdateUser(req: Request, res: Response) {
   respondWithJSON(res, 200, resp);
 }
 
+async function handlerDeleteChirp(req: Request, res: Response) {
+  const reqToken = getBearerToken(req);
+  if (!reqToken) { throw new UnauthorizedError("no access token") }
+  const userID = validateJWT(reqToken, cfg.secret);
+  const chirp = await getChirpByID(req.params.chirpID);
+  if (!chirp) { throw new NotFoundError("chirp not found") }
+  if (userID != chirp.userId) { throw new ForbiddenError("forbidden") }
+  await deleteChirpByID(chirp.id);
+  respondWithJSON(res, 204, {})
+}
+
 
 const app = express();
 const PORT = 8080;
@@ -236,6 +247,10 @@ app.post("/api/chirps", (req, res, next) => {
 
 app.put("/api/users", (req, res, next) => {
   Promise.resolve(handlerUpdateUser(req, res)).catch(next);
+});
+
+app.delete("/api/chirps/:chirpID", (req, res, next) => {
+  Promise.resolve(handlerDeleteChirp(req, res)).catch(next);
 });
 
 app.use(errorMiddleWare);

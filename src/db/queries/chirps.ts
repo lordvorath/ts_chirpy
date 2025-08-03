@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../index.js";
 import { chirps, NewChirp } from "../schema.js";
+import { ChildProcess } from "child_process";
 
 export async function createChirp(chirp: NewChirp) {
   const [rows] = await db.insert(chirps).values(chirp).returning();
@@ -17,4 +18,10 @@ export async function getChirpByID(id: string) {
     return;
   }
   return rows[0];
+}
+
+export async function deleteChirpByID(id:string) {
+  await db
+  .delete(chirps)
+  .where(eq(chirps.id, id));
 }
