@@ -6,7 +6,7 @@ import { respondWithError, respondWithJSON } from "./json.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { createUser, deleteAllUsers, getUserByEmail, getUserByID, updateUser } from "./db/queries/users.js";
+import { createUser, deleteAllUsers, getUserByEmail, getUserByID, updateUser, upgradeUser } from "./db/queries/users.js";
 import { createChirp, deleteChirpByID, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
 import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
@@ -203,6 +203,26 @@ async function handlerDeleteChirp(req: Request, res: Response) {
   respondWithJSON(res, 204, {})
 }
 
+async function handlerUpgradeUser(req: Request, res: Response) {
+  type params = {
+    event: string;
+    data: {
+      userId: string;
+    }
+  }
+  const b: params = req.body;
+
+  if (b.event != "user.upgraded") {
+    respondWithJSON(res, 204, {});
+    return;
+  }
+
+  const newUser = await upgradeUser(b.data.userId);
+  if (!newUser) { throw new NotFoundError("user not found") }
+
+  respondWithJSON(res, 204, {});
+}
+
 
 const app = express();
 const PORT = 8080;
@@ -243,6 +263,9 @@ app.post("/api/revoke", (req, res, next) => {
 });
 app.post("/api/chirps", (req, res, next) => {
   Promise.resolve(handlerCreateChirp(req, res)).catch(next);
+});
+app.post("/api/polka/webhooks", (req, res, next) => {
+  Promise.resolve(handlerUpgradeUser(req, res)).catch(next);
 });
 
 app.put("/api/users", (req, res, next) => {
