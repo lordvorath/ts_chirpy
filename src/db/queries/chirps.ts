@@ -9,7 +9,7 @@ export async function createChirp(chirp: NewChirp) {
 }
 
 export async function getAllChirps() {
-  return db.select().from(chirps);
+  return db.select().from(chirps).orderBy(chirps.createdAt);
 }
 
 export async function getChirpByID(id: string) {
@@ -20,8 +20,16 @@ export async function getChirpByID(id: string) {
   return rows[0];
 }
 
-export async function deleteChirpByID(id:string) {
+export async function deleteChirpByID(id: string) {
   await db
-  .delete(chirps)
-  .where(eq(chirps.id, id));
+    .delete(chirps)
+    .where(eq(chirps.id, id));
+}
+
+export async function getChirpsByAuthor(userId: string) {
+  return db
+    .select()
+    .from(chirps)
+    .where(eq(chirps.userId, userId))
+    .orderBy(chirps.createdAt);
 }

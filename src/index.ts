@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser, deleteAllUsers, getUserByEmail, getUserByID, updateUser, upgradeUser } from "./db/queries/users.js";
-import { createChirp, deleteChirpByID, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
+import { createChirp, deleteChirpByID, getAllChirps, getChirpByID, getChirpsByAuthor } from "./db/queries/chirps.js";
 import { checkPasswordHash, getAPIKey, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
 import { createRefreshToken, getUserFromRefreshToken, revokeToken } from "./db/queries/refresh_tokens.js";
@@ -106,8 +106,26 @@ async function handlerCreateChirp(req: Request, res: Response) {
 }
 
 async function handlerGetAllChrips(req: Request, res: Response) {
+  let sort = "asc";
+  let sortQuery = req.query.sort;
+  if (typeof sortQuery === "string") {
+    sort = sortQuery;
+  }
+  let authorId = "";
+  let authorIdQuery = req.query.authorId;
+  if (typeof authorIdQuery === "string") {
+    authorId = authorIdQuery;
+  }
 
-  const chirps = await getAllChirps();
+  let chirps;
+  if (authorId === "") {
+    chirps = await getAllChirps();
+  } else {
+    chirps = await getChirpsByAuthor(authorId);
+  }
+  if (sort === "desc") {
+    chirps = chirps.reverse();
+  }
   respondWithJSON(res, 200, chirps);
 }
 async function handlerGetChirpByID(req: Request, res: Response) {
@@ -240,7 +258,7 @@ app.get("/api/healthz", (req, res, next) => {
 app.get("/admin/metrics", (req, res, next) => {
   Promise.resolve(handlerMetrics(req, res)).catch(next);
 });
-app.get("/api/chirps", (req, res, next) => {
+app.get("/api/chirps/", (req, res, next) => {
   Promise.resolve(handlerGetAllChrips(req, res)).catch(next);
 });
 app.get("/api/chirps/:chirpID", (req, res, next) => {
