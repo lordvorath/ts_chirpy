@@ -8,7 +8,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser, deleteAllUsers, getUserByEmail, getUserByID, updateUser, upgradeUser } from "./db/queries/users.js";
 import { createChirp, deleteChirpByID, getAllChirps, getChirpByID } from "./db/queries/chirps.js";
-import { checkPasswordHash, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
+import { checkPasswordHash, getAPIKey, getBearerToken, hashPassword, makeJWT, makeRefreshToken, validateJWT } from "./auth.js";
 import { NewUser } from "./db/schema.js";
 import { createRefreshToken, getUserFromRefreshToken, revokeToken } from "./db/queries/refresh_tokens.js";
 
@@ -204,6 +204,8 @@ async function handlerDeleteChirp(req: Request, res: Response) {
 }
 
 async function handlerUpgradeUser(req: Request, res: Response) {
+  if (getAPIKey(req) != cfg.polkaKey) { throw new UnauthorizedError("forbidden") }
+
   type params = {
     event: string;
     data: {
